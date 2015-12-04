@@ -20,7 +20,7 @@
 #include <string>
 #include <system_error>
 #include <iostream>
-#include "FortranCommon.hpp"
+#include "Variable.hpp"
 
 using namespace llvm;
 using namespace object;
@@ -57,97 +57,8 @@ static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit
     // children of common are the variables it contains
     auto child = die->getFirstChild();
     while (child && !child->isNULL()) {
-        size_t encoding, byteSize;
-        auto varName = child->getName(cu, DINameKind::ShortName);
-        
-        // location is the offset in bytes to the start of the variable
-        auto location = child->getAttributeValueAsReference(cu, dwarf::DW_AT_location, -1);
-        
-        outs() << "    variable " << varName << "@" << location << " ";
-    
-        auto typeOffset = child->getAttributeValueAsReference(cu, dwarf::DW_AT_type, -1);
-        auto dieType = cu->getDIEForOffset(typeOffset);
-        auto typeTag = dieType->getTag();
-        switch (typeTag) {
-            case dwarf::DW_TAG_array_type:
-            {
-                auto arrayBaseTypeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, -1);
-                auto dieArrayBaseType = cu->getDIEForOffset(arrayBaseTypeOffset);
-                if (dieArrayBaseType->getTag() == dwarf::DW_TAG_string_type) {
-                    encoding = -1;
-                }
-                else {
-                    encoding = dieArrayBaseType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_encoding, -1);
-                }
-                byteSize = dieArrayBaseType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, -1);
-                auto dim = dieType->getFirstChild();
-                while (dim && !dim->isNULL()) {
-                    int64_t upperBound = -1, lowerBound = 0;
-                    assert(dim->getTag() == dwarf::DW_TAG_subrange_type);
-                    DWARFFormValue form;
-                    bool r = dim->getAttributeValue(cu, dwarf::DW_AT_upper_bound, form);
-                    if (r) {
-                        auto ub = form.getAsSignedConstant();
-                        if (ub.hasValue()) upperBound = ub.getValue();
-                    }
-                    
-                    r = dim->getAttributeValue(cu, dwarf::DW_AT_lower_bound, form);
-                    if (r) {
-                        auto lb = form.getAsSignedConstant();
-                        if (lb.hasValue()) lowerBound = lb.getValue();
-                    }
-                    outs() << "[" << lowerBound << ":" << upperBound << "]";
-                    dim = dim->getSibling();
-                }
-            }
-                break;
-                
-            case dwarf::DW_TAG_base_type:
-            {
-                encoding = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_encoding, -1);
-                byteSize = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, -1);
-                //assert(encoding == llvm::dwarf::DW_ATE_signed);
-            }
-                break;
-                
-            case dwarf::DW_TAG_string_type:
-            {
-                byteSize = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, -1);
-                encoding = SIZE_T_MAX;
-            }
-                break;
-                
-            default:
-                outs() << "unexpected type tag " << typeTag << '\n';
-                throw "unexepected type for tag";
-        }
-
-        switch (encoding) {
-            case dwarf::DW_ATE_signed:
-                outs() << "(signed*";
-                break;
-                
-            case dwarf::DW_ATE_float:
-                outs() << "(float*";
-                break;
-                
-            case dwarf::DW_ATE_complex_float:
-                outs() << "(complex_float*";
-                break;
-                
-            case dwarf::DW_ATE_boolean:
-                outs() << "(boolean*";
-                break;
-                
-            case SIZE_T_MAX:
-                outs() << "(string*";
-                break;
-                
-            default:
-                outs() << "(" << encoding << "*";
-        }
-
-        outs() << byteSize << ")" << '\n';
+        auto var = Variable::extract(child, cu);
+        outs() << *var;
         child = child->getSibling();
     }
 }

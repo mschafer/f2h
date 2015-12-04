@@ -18,6 +18,8 @@ add_definitions(${LLVM_DEFINITIONS})
 add_executable(f2h
 #  llvm-dwarfdump.cpp
   main.cpp
+  Variable.hpp
+  Variable.cpp
 )
 
 set_property(TARGET f2h PROPERTY CXX_STANDARD 11)
