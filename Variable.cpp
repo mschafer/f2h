@@ -3,6 +3,7 @@
 #include <llvm/DebugInfo/DWARF/DWARFContext.h>
 #include <llvm/DebugInfo/DWARF/DWARFFormValue.h>
 #include <type_traits>
+#include <sstream>
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
 {
@@ -36,7 +37,6 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
         default:
             o << var.type_ << " ? ";
     }
-    
     
     o << var.name_;
     for (auto d : var.dims_) {
@@ -172,4 +172,88 @@ Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
     }
 
     return r;
+}
+
+std::string Variable::cDeclaration() const
+{
+    using namespace llvm;
+    std::ostringstream o;
+    
+    // element type declaration
+    auto es = elementSize();
+    switch (type_) {
+        case dwarf::DW_ATE_boolean:
+        case dwarf::DW_ATE_signed:
+            o << "int" << es*8 << "_t ";
+            break;
+            
+        case dwarf::DW_ATE_float:
+        {
+            switch (es) {
+                case 4:
+                    o << "float ";
+                    break;
+                    
+                case 8:
+                    o << "double ";
+                    break;
+                    
+                case 16:
+                    o << "long double ";
+                    break;
+                    
+                default:
+                    throw std::invalid_argument("impossible float size");
+            }
+            break;
+        }
+            
+        case dwarf::DW_ATE_complex_float:
+        {
+            switch (es) {
+                case 8:
+                    o << "float complex ";
+                    break;
+                    
+                case 16:
+                    o << "double complex ";
+                    break;
+                    
+                case 32:
+                    o << "long double complex ";
+                    break;
+                    
+                default:
+                    throw std::invalid_argument("impossible complex size");
+            }
+            break;
+        }
+            
+        case dwarf::DW_ATE_signed_char:
+        case dwarf::DW_ATE_unsigned_char:
+            o << "char ";
+            break;
+            
+        default:
+            throw std::invalid_argument("unknown type");
+    }
+    
+    o << name_;
+    
+    // should this be in reverse order?
+    auto itdim = dims_.rbegin();
+    while (itdim != dims_.rend()) {
+        auto &d = *itdim;
+        o << "[" << d.second - d.first << "]";
+        ++itdim;
+    }
+    
+    // dimension of char arrays
+    if (es != 1 && (type_ == dwarf::DW_ATE_signed_char || type_ == dwarf::DW_ATE_unsigned_char)) {
+        o << "[" << elementSize() << "]";
+    }
+    
+    o << ";\n";
+    
+    return o.str();
 }

@@ -59,6 +59,7 @@ static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit
     while (child && !child->isNULL()) {
         auto var = Variable::extract(child, cu);
         outs() << *var;
+        outs() << var->cDeclaration();
         child = child->getSibling();
     }
 }

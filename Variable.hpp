@@ -22,6 +22,20 @@ public:
     Variable();
     virtual ~Variable();
     
+    std::string cDeclaration() const;
+    
+    size_t elementCount() const {
+        size_t r = 1;
+        
+        for(auto &d : dims_) {
+            ptrdiff_t s = d.second - d.first;
+            r *= s;
+        }
+        return r;
+    }
+    
+    size_t elementSize() const { return size_ / elementCount(); }
+    
     static std::unique_ptr<Variable> extract(
         const llvm::DWARFDebugInfoEntryMinimal *die,
         llvm::DWARFCompileUnit *cu);
