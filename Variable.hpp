@@ -18,6 +18,7 @@ public:
 
     /// lower bound, upper bound
     using Dimension = std::pair<ptrdiff_t, ptrdiff_t>;
+    using Handle = std::unique_ptr<Variable>;
     
     Variable();
     virtual ~Variable();
@@ -36,7 +37,7 @@ public:
     
     size_t elementSize() const { return size_ / elementCount(); }
     
-    static std::unique_ptr<Variable> extract(
+    static Handle extract(
         const llvm::DWARFDebugInfoEntryMinimal *die,
         llvm::DWARFCompileUnit *cu);
     

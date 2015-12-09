@@ -21,6 +21,7 @@
 #include <system_error>
 #include <iostream>
 #include "Variable.hpp"
+#include "CommonBlock.hpp"
 
 using namespace llvm;
 using namespace object;
@@ -41,26 +42,11 @@ static bool error(StringRef Filename, std::error_code EC) {
 
 static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
 {
-    auto debugInfoData = cu->getDebugInfoExtractor();
-    auto offset = die->getOffset();
-    assert(debugInfoData.isValidOffset(offset));
-    auto abbrCode = debugInfoData.getULEB128(&offset);
-    assert(abbrCode);
-    if (die->getTag() == dwarf::DW_TAG_common_block) {
-        const char *commonName = die->getName(cu, llvm::DINameKind::ShortName);
-        outs() << "  common block " << commonName << '\n';
-    }
-    else {
-        throw "not a common";
-    }
-    
-    // children of common are the variables it contains
-    auto child = die->getFirstChild();
-    while (child && !child->isNULL()) {
-        auto var = Variable::extract(child, cu);
-        outs() << *var;
-        outs() << var->cDeclaration();
-        child = child->getSibling();
+    std::string commonName = die->getName(cu, llvm::DINameKind::ShortName);
+    if (CommonBlock::map_.find(commonName) == CommonBlock::map_.end()) {
+        CommonBlock::Handle cb(new CommonBlock());
+        cb->extract(die, cu);
+        CommonBlock::map_.insert(std::make_pair(commonName, std::move(cb)));
     }
 }
 

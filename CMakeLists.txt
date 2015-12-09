@@ -18,6 +18,8 @@ add_definitions(${LLVM_DEFINITIONS})
 add_executable(f2h
 #  llvm-dwarfdump.cpp
   main.cpp
+  CommonBlock.hpp
+  CommonBlock.cpp
   Variable.hpp
   Variable.cpp
 )
