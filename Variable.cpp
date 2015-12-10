@@ -14,6 +14,10 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
             o << "signed ";
             break;
             
+        case dwarf::DW_ATE_unsigned:
+            o << "unsigned ";
+            break;
+            
         case dwarf::DW_ATE_float:
             o << "float ";
             break;
@@ -185,6 +189,10 @@ std::string Variable::cDeclaration() const
         case dwarf::DW_ATE_boolean:
         case dwarf::DW_ATE_signed:
             o << "int" << es*8 << "_t ";
+            break;
+            
+        case dwarf::DW_ATE_unsigned:
+            o << "uint" << es*8 << "_t ";
             break;
             
         case dwarf::DW_ATE_float:

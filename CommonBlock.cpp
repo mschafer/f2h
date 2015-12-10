@@ -7,8 +7,19 @@
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Dwarf.h"
+#include <sstream>
 
 using namespace llvm;
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const CommonBlock &cb)
+{
+    o << "common block " << cb.name_ << '\n';
+    for (auto &v : cb.vars_)
+    {
+        o << "    " << v->cDeclaration();
+    }
+    return o;
+}
 
 CommonBlock::CommonMap CommonBlock::map_;
 
@@ -32,9 +43,37 @@ void CommonBlock::extract(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUni
     auto child = die->getFirstChild();
     while (child && !child->isNULL()) {
         auto var = Variable::extract(child, cu);
-        outs() << *var;
-        outs() << var->cDeclaration();
         vars_.push_back(std::move(var));
         child = child->getSibling();
+    }
+    insertPadding();
+    outs() << *this;
+}
+
+void CommonBlock::insertPadding()
+{
+    assert(vars_[0]->location_ == 0);
+    size_t loc = 0, padCount=1;
+    auto it = vars_.begin();
+    loc += (*it)->size_;
+    ++it;
+    while (it != vars_.end()) {
+        ptrdiff_t pad = (*it)->location_ - loc;
+        assert(pad >= 0);
+        if (pad) {
+            std::stringstream ss;
+            ss << "pad" << padCount++;
+            Variable::Handle padVar(new Variable());
+            padVar->location_ = loc;
+            padVar->size_ = pad;
+            padVar->type_ = dwarf::DW_ATE_unsigned;
+            padVar->name_ = ss.str();
+            if (pad > 1) {
+                padVar->dims_.push_back(Variable::Dimension(0, pad));
+            }
+            it = vars_.insert(it, std::move(padVar));
+            loc += pad;
+        }
+        ++it;
     }
 }

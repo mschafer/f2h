@@ -20,6 +20,7 @@ public:
     using CommonMap = std::unordered_map<std::string, Handle>;
 
     void extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
+    void insertPadding();
 
     static CommonMap map_;
     std::string name_;
