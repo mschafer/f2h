@@ -47,7 +47,6 @@ void CommonBlock::extract(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUni
         child = child->getSibling();
     }
     insertPadding();
-    outs() << *this;
 }
 
 void CommonBlock::insertPadding()
@@ -76,4 +75,21 @@ void CommonBlock::insertPadding()
         }
         ++it;
     }
+}
+
+std::string CommonBlock::cDeclaration() const
+{
+    std::stringstream ss;
+    ss << "#ifdef __cplusplus\nextern \"C\" {\n#endif\n";
+    ss << "extern struct { \n";
+    
+    for (auto &v : vars_)
+    {
+        ss << "    " << v->cDeclaration();
+    }
+    
+    ss << "} " << linkageName_ << ";\n";
+    ss << "#ifdef __cplusplus\n}\n#endif\n";
+    
+    return ss.str();
 }

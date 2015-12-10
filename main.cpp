@@ -46,6 +46,7 @@ static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit
     if (CommonBlock::map_.find(commonName) == CommonBlock::map_.end()) {
         CommonBlock::Handle cb(new CommonBlock());
         cb->extract(die, cu);
+        outs() << cb->cDeclaration();
         CommonBlock::map_.insert(std::make_pair(commonName, std::move(cb)));
     }
 }
