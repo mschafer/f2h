@@ -46,7 +46,7 @@ static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit
     if (CommonBlock::map_.find(commonName) == CommonBlock::map_.end()) {
         CommonBlock::Handle cb(new CommonBlock());
         cb->extract(die, cu);
-        outs() << cb->cDeclaration();
+        //outs() << cb->cDeclaration();
         CommonBlock::map_.insert(std::make_pair(commonName, std::move(cb)));
     }
 }
@@ -80,6 +80,10 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
     auto offset = die->getOffset();
 
     const char *subName = die->getName(cu, llvm::DINameKind::ShortName);
+
+    // ignore main
+    if (!strcmp(subName, "main")) return;
+    
     std::cout << "subroutine " << subName << " @ " << die->getOffset() << std::endl;
     auto same = cu->getDIEForOffset(offset);
     assert(same == die);
@@ -96,6 +100,7 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
                 handleCommon(child, cu);
             }
             else if (tag == dwarf::DW_TAG_formal_parameter) {
+                Variable::Handle h = Variable::extract(child, cu);
                 handleParameter(child, cu);
             }
         }

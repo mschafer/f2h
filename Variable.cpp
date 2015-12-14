@@ -96,20 +96,27 @@ Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
     std::unique_ptr<Variable> r(new Variable());
     r->name_ = die->getName(cu, DINameKind::ShortName);
     
-    ///\todo figure out how to get the location
     DWARFFormValue locForm;
     bool t = die->getAttributeValue(cu, dwarf::DW_AT_location, locForm);
     if (t) {
+        // formal parameters use data4 instead of block (getAsSignedConstant?)
         auto locBlock = locForm.getAsBlock();
-        assert(locBlock.hasValue());
-        auto val = locBlock.getValue();
-        if (val[0] == dwarf::DW_OP_addr) {
-            uint64_t addr;
-            unsigned char *paddr = reinterpret_cast<unsigned char *>(& addr);
-            std::copy(val.begin()+1, val.begin()+9, paddr);
-            r->location_ = addr;
+        if (!locBlock.hasValue()) {
+            auto locConstant = locForm.getAsSignedConstant();
+            assert(locConstant.hasValue());
+            r->location_ = locConstant.getValue();
         } else {
-            
+            auto val = locBlock.getValue();
+            if (val[0] == dwarf::DW_OP_addr) {
+                uint64_t addr;
+                unsigned char *paddr = reinterpret_cast<unsigned char *>(& addr);
+                std::copy(val.begin()+1, val.begin()+9, paddr);
+                r->location_ = addr;
+            } else {
+                // no address so this is a register or stack location which means the variable must
+                // be a subroutine parameter and we don't need the location
+                r->location_ = static_cast<uint64_t>(-1);
+            }
         }
     }
 
@@ -161,12 +168,24 @@ Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
             r->size_ = bt.second * count;
         }
         break;
+
+        case dwarf::DW_TAG_const_type:
+        {
+            // find the base type for the constant
+            auto conTypeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
+            auto dieConType = cu->getDIEForOffset(conTypeOffset);
+            auto bt = extractBaseType(dieConType, cu);
+            r->type_ = bt.first;
+            r->size_ = bt.second;
+        }
+        break;
             
         case dwarf::DW_TAG_structure_type:
             throw std::invalid_argument("structures not supported yet");
             break;
             
         case dwarf::DW_TAG_pointer_type:
+            // argv
             throw std::invalid_argument("pointers not supported yet");
             break;
             
