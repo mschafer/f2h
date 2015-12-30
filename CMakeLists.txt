@@ -20,6 +20,8 @@ add_executable(f2h
   main.cpp
   CommonBlock.hpp
   CommonBlock.cpp
+  Subprogram.hpp
+  Subprogram.cpp
   Variable.hpp
   Variable.cpp
 )

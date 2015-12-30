@@ -22,6 +22,7 @@
 #include <iostream>
 #include "Variable.hpp"
 #include "CommonBlock.hpp"
+#include "Subprogram.hpp"
 
 using namespace llvm;
 using namespace object;
@@ -44,8 +45,7 @@ static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit
 {
     std::string commonName = die->getName(cu, llvm::DINameKind::ShortName);
     if (CommonBlock::map_.find(commonName) == CommonBlock::map_.end()) {
-        CommonBlock::Handle cb(new CommonBlock());
-        cb->extract(die, cu);
+        CommonBlock::Handle cb(CommonBlock::extract(die, cu));
         //outs() << cb->cDeclaration();
         CommonBlock::map_.insert(std::make_pair(commonName, std::move(cb)));
     }
@@ -84,6 +84,8 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
     // ignore main
     if (!strcmp(subName, "main")) return;
     
+    Subprogram::Handle r(Subprogram::extract(die, cu));
+    
     std::cout << "subroutine " << subName << " @ " << die->getOffset() << std::endl;
     auto same = cu->getDIEForOffset(offset);
     assert(same == die);
@@ -101,7 +103,8 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
             }
             else if (tag == dwarf::DW_TAG_formal_parameter) {
                 Variable::Handle h = Variable::extract(child, cu);
-                handleParameter(child, cu);
+                outs() << "    " << *h;
+                //handleParameter(child, cu);
             }
         }
         child = child->getSibling();

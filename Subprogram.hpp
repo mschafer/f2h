@@ -1,5 +1,5 @@
-#ifndef CommonBlock_hpp
-#define CommonBlock_hpp
+#ifndef Subprogram_hpp
+#define Subprogram_hpp
 
 #include <string>
 #include <vector>
@@ -13,22 +13,21 @@ class DWARFCompileUnit;
 
 }
 
-class CommonBlock
+class Subprogram
 {
 public:
-    using Handle = std::unique_ptr<CommonBlock>;
-    using CommonMap = std::unordered_map<std::string, Handle>;
-
+    using Handle = std::unique_ptr<Subprogram>;
+    
+    Subprogram();
+    ~Subprogram();
+    
     static Handle extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
 
     std::string cDeclaration() const;
-
-    void insertPadding();
-
-    static CommonMap map_;
+    
     std::string name_;
     std::string linkageName_;
-    std::vector<Variable::Handle> vars_;
+    std::vector<Variable::Handle> params_;
 };
 
 #endif

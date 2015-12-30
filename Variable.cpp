@@ -267,7 +267,7 @@ std::string Variable::cDeclaration() const
     
     o << name_;
     
-    // should this be in reverse order?
+    // dimensions in reverse order for C
     auto itdim = dims_.rbegin();
     while (itdim != dims_.rend()) {
         auto &d = *itdim;
