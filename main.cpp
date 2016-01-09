@@ -119,25 +119,35 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
  * Immediate children of the subprograms will be the common blocks.
 
  http://llvm.org/doxygen/classllvm_1_1DWARFDebugInfoEntryMinimal.html
+ http://www.dwarfstd.org/doc/DWARF4.pdf
  */
 static void extractObject(ObjectFile &obj)
 {
     std::unique_ptr<DWARFContextInMemory> DICtx(new DWARFContextInMemory(obj));
-
-    // assuming object file, only one compile unit
-    const auto &cu = DICtx->getCompileUnitAtIndex(0);
     
-    // calling this with false reads in the entire DIE list for this cu so we can walk through it.
-    auto cudie = cu->getUnitDIE(false);
-    
-    // look for children of the compile unit that are subprograms
-    // immediate children of the subprogram include parameters, common blocks, and local variables
-    auto die = cudie->getFirstChild();
-    while (die && !die->isNULL()) {
-        if (die->isSubprogramDIE()) {
-            handleSubprogram(die, cu);
+    auto cuit = DICtx->compile_units();
+    for (auto &cu : cuit) {
+        
+        // calling this with false reads in the entire DIE list for this cu so we can walk through it.
+        auto cudie = cu->getUnitDIE(false);
+        
+        // ensure compilation unit is fortran
+        DWARFFormValue form;
+        cudie->getAttributeValue(cu.get(), dwarf::DW_AT_language, form);
+        auto lang = form.getAsUnsignedConstant().getValueOr(-1);
+        assert (lang == dwarf::DW_LANG_Fortran77 ||
+                lang == dwarf::DW_LANG_Fortran90 ||
+                lang == dwarf::DW_LANG_Fortran95);
+        
+        // look for children of the compile unit that are subprograms
+        // immediate children of the subprogram include parameters, common blocks, and local variables
+        auto die = cudie->getFirstChild();
+        while (die && !die->isNULL()) {
+            if (die->isSubprogramDIE()) {
+                handleSubprogram(die, cu.get());
+            }
+            die = die->getSibling();
         }
-        die = die->getSibling();
     }
 }
 
