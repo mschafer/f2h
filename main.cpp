@@ -41,39 +41,6 @@ static bool error(StringRef Filename, std::error_code EC) {
   return true;
 }
 
-static void handleCommon(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
-{
-    std::string commonName = die->getName(cu, llvm::DINameKind::ShortName);
-    if (CommonBlock::map_.find(commonName) == CommonBlock::map_.end()) {
-        CommonBlock::Handle cb(CommonBlock::extract(die, cu));
-        //outs() << cb->cDeclaration();
-        CommonBlock::map_.insert(std::make_pair(commonName, std::move(cb)));
-    }
-}
-
-static void handleParameter(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
-{
-    const char *paramName = die->getName(cu, llvm::DINameKind::ShortName);
-    auto typeOffset = die->getAttributeValueAsReference(cu, dwarf::DW_AT_type, -1);
-    auto dieType = cu->getDIEForOffset(typeOffset);
-    auto typeTag = dieType->getTag();
-    switch (typeTag) {
-        case dwarf::DW_TAG_array_type:
-            break;
-            
-        case dwarf::DW_TAG_base_type:
-            break;
-            
-        case dwarf::DW_TAG_string_type:
-            break;
-            
-        default:
-            break;
-    }
-
-    outs() << "  subroutine parameter " << paramName << '\n';
-}
-
 static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
 {
     auto debug_info_data = cu->getDebugInfoExtractor();
@@ -99,7 +66,7 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
         if (child->getAbbreviationDeclarationPtr()) {
             auto tag = child->getTag();
             if (tag == dwarf::DW_TAG_common_block) {
-                handleCommon(child, cu);
+                CommonBlock::extractAndAdd(child, cu);
             }
             else if (tag == dwarf::DW_TAG_formal_parameter) {
                 Variable::Handle h = Variable::extract(child, cu);
@@ -135,9 +102,12 @@ static void extractObject(ObjectFile &obj)
         DWARFFormValue form;
         cudie->getAttributeValue(cu.get(), dwarf::DW_AT_language, form);
         auto lang = form.getAsUnsignedConstant().getValueOr(-1);
-        assert (lang == dwarf::DW_LANG_Fortran77 ||
-                lang == dwarf::DW_LANG_Fortran90 ||
-                lang == dwarf::DW_LANG_Fortran95);
+        if (!(lang == dwarf::DW_LANG_Fortran77 ||
+              lang == dwarf::DW_LANG_Fortran90 ||
+              lang == dwarf::DW_LANG_Fortran95)) {
+            outs() << cudie->getName(cu.get(), DINameKind::ShortName) << " is not FORTRAN 77,90, or 95.  Skipping\n";
+            continue;
+        }
         
         // look for children of the compile unit that are subprograms
         // immediate children of the subprogram include parameters, common blocks, and local variables

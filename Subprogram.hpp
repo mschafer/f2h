@@ -16,11 +16,15 @@ class DWARFCompileUnit;
 class Subprogram
 {
 public:
-    using Handle = std::unique_ptr<Subprogram>;
+    using Handle = std::shared_ptr<Subprogram>;
     
     Subprogram();
     ~Subprogram();
     
+    /**
+     * Extract information about the subprogram from dwarf data.
+     * Any referenced common blocks are added to the static map.
+     */
     static Handle extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
 
     std::string cDeclaration() const;
@@ -28,6 +32,8 @@ public:
     std::string name_;
     std::string linkageName_;
     std::vector<Variable::Handle> params_;
+    
+    void extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
 };
 
 #endif

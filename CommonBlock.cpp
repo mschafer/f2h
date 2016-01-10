@@ -23,6 +23,21 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const CommonBlock &cb)
 
 CommonBlock::CommonMap CommonBlock::map_;
 
+CommonBlock::Handle
+CommonBlock::extractAndAdd(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
+{
+    std::string commonName = die->getName(cu, llvm::DINameKind::ShortName);
+    auto fit = CommonBlock::map_.find(commonName);
+    if (fit == CommonBlock::map_.end()) {
+        CommonBlock::Handle cb(CommonBlock::extract(die, cu));
+        CommonBlock::map_.insert(std::make_pair(commonName, cb));
+        return cb;
+    } else {
+        return fit->second;
+    }
+}
+
+
 CommonBlock::Handle CommonBlock::extract(const DWARFDebugInfoEntryMinimal *die, DWARFCompileUnit *cu)
 {
     CommonBlock::Handle r(new CommonBlock());
