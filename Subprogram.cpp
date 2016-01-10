@@ -44,8 +44,14 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         
         else if (tag == dwarf::DW_TAG_formal_parameter) {
             Variable::Handle h = Variable::extract(child, cu);
+
+            // if there is a parameter named __result, then it is an out parameter for
+            // the return value of a function.  I still haven't figured out how this works
+            // so best to error here
+            if (!h->name_.compare("__result")) {
+                throw std::runtime_error("functions returning a non-scalar are not supported yet");
+            }
             outs() << "    " << *h;
-            //handleParameter(child, cu);
         }
         
         // need to check the local variables because that is the only way to identify
@@ -71,7 +77,11 @@ std::string Subprogram::cDeclaration() const
 void Subprogram::extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu)
 {
     std::string resultName = "__result_" + name_;
-    if (resultName.compare(die->getName(cu, DINameKind::ShortName))) {
-        
+    const char *varName = die->getName(cu, DINameKind::ShortName);
+    if (!resultName.compare(varName)) {
+        Variable::Handle ret = Variable::extract(die, cu);
+        outs() << name_ << " return is: " << ret->cDeclaration();
+    } else {
+        outs() << " no return for " << name_;
     }
 }

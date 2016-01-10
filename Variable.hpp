@@ -37,6 +37,8 @@ public:
     
     size_t elementSize() const { return size_ / elementCount(); }
     
+    static std::string cTypeDecl(llvm::dwarf::TypeKind, size_t elementSize);
+    
     static Handle extract(
         const llvm::DWARFDebugInfoEntryMinimal *die,
         llvm::DWARFCompileUnit *cu);

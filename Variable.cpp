@@ -197,36 +197,35 @@ Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
     return r;
 }
 
-std::string Variable::cDeclaration() const
+std::string Variable::cTypeDecl(llvm::dwarf::TypeKind type, size_t elementSize)
 {
     using namespace llvm;
     std::ostringstream o;
     
     // element type declaration
-    auto es = elementSize();
-    switch (type_) {
+    switch (type) {
         case dwarf::DW_ATE_boolean:
         case dwarf::DW_ATE_signed:
-            o << "int" << es*8 << "_t ";
+            o << "int" << elementSize*8 << "_t";
             break;
             
         case dwarf::DW_ATE_unsigned:
-            o << "uint" << es*8 << "_t ";
+            o << "uint" << elementSize*8 << "_t";
             break;
             
         case dwarf::DW_ATE_float:
         {
-            switch (es) {
+            switch (elementSize) {
                 case 4:
-                    o << "float ";
+                    o << "float";
                     break;
                     
                 case 8:
-                    o << "double ";
+                    o << "double";
                     break;
                     
                 case 16:
-                    o << "long double ";
+                    o << "long double";
                     break;
                     
                 default:
@@ -237,17 +236,17 @@ std::string Variable::cDeclaration() const
             
         case dwarf::DW_ATE_complex_float:
         {
-            switch (es) {
+            switch (elementSize) {
                 case 8:
-                    o << "float complex ";
+                    o << "float complex";
                     break;
                     
                 case 16:
-                    o << "double complex ";
+                    o << "double complex";
                     break;
                     
                 case 32:
-                    o << "long double complex ";
+                    o << "long double complex";
                     break;
                     
                 default:
@@ -258,13 +257,23 @@ std::string Variable::cDeclaration() const
             
         case dwarf::DW_ATE_signed_char:
         case dwarf::DW_ATE_unsigned_char:
-            o << "char ";
+            o << "char";
             break;
             
         default:
             throw std::invalid_argument("unknown type");
     }
+    return o.str();
+}
+
+std::string Variable::cDeclaration() const
+{
+    using namespace llvm;
+    std::ostringstream o;
     
+    // element type declaration
+    auto es = elementSize();
+    o << cTypeDecl(type_, es) << " ";
     o << name_;
     
     // dimensions in reverse order for C
