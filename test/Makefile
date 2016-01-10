@@ -1,17 +1,31 @@
 FC = gfortran
 CC = clang
 
-F_FLAGS = -O -g -fno-underscoring
-C_FLAGS = -O -g
+FFLAGS = -O -g
 
-timestwo.o: timestwo.f
-	$(FC) -c $(F_FLAGS) $<
+LLVM_DWARFDUMP ?= /Users/mschafer/install/bin/llvm-dwarfdump
 
-test.o: test.c
-	$(CC) -c $(C_FLAGS) $<
+FORTRAN_SRC = \
+  arrays.f \
+  strings.f  \
+  timestwo.f
+  
+FORTRAN_OBJ = $(FORTRAN_SRC:.f=.o)
+FORTRAN_SO = libtest.so
+DUMP_FILE = $(FORTRAN_SO:.so=.dump)
 
-test: test.o timestwo.o
-	$(CC) -o test test.o timestwo.o
+default: $(FORTRAN_OBJ) $(FORTRAN_SO) $(DUMP_FILE) hand_test
 
+# if we build the library from objects, then no debug symbols are present
+# so build it from sources instead
+$(FORTRAN_SO) : $(FORTRAN_SRC)
+	$(FC) $(FFLAGS) -shared $(FORTRAN_SRC) -o $(FORTRAN_SO)
+
+$(DUMP_FILE) : $(FORTRAN_SO)
+	-$(LLVM_DWARFDUMP) $(FORTRAN_SO).dSYM/Contents/Resources/DWARF/$(FORTRAN_SO) > $@
+
+hand_test : $(FORTRAN_OBJ) main.c by_hand.h
+	$(CC) -g -o $@ main.c $(FORTRAN_OBJ) -L /usr/local/gfortran/lib -lgfortran
+	
 clean: 
-	rm timestwo.o test.o test
+	rm -f *.o $(FORTRAN_SO)
