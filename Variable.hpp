@@ -24,6 +24,9 @@ public:
     virtual ~Variable();
     
     std::string cDeclaration() const;
+    std::string cType() const {
+        return dwarfToCType(type_, elementSize());
+    }
     
     size_t elementCount() const {
         size_t r = 1;
@@ -37,7 +40,7 @@ public:
     
     size_t elementSize() const { return size_ / elementCount(); }
     
-    static std::string cTypeDecl(llvm::dwarf::TypeKind, size_t elementSize);
+    static std::string dwarfToCType(llvm::dwarf::TypeKind, size_t elementSize);
     
     static Handle extract(
         const llvm::DWARFDebugInfoEntryMinimal *die,

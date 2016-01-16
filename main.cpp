@@ -114,7 +114,9 @@ static void extractObject(ObjectFile &obj)
         auto die = cudie->getFirstChild();
         while (die && !die->isNULL()) {
             if (die->isSubprogramDIE()) {
+                Subprogram::Handle sub = Subprogram::extract(die, cu.get());
                 handleSubprogram(die, cu.get());
+                outs() << sub->cDeclaration();
             }
             die = die->getSibling();
         }

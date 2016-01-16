@@ -197,7 +197,7 @@ Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
     return r;
 }
 
-std::string Variable::cTypeDecl(llvm::dwarf::TypeKind type, size_t elementSize)
+std::string Variable::dwarfToCType(llvm::dwarf::TypeKind type, size_t elementSize)
 {
     using namespace llvm;
     std::ostringstream o;
@@ -273,7 +273,7 @@ std::string Variable::cDeclaration() const
     
     // element type declaration
     auto es = elementSize();
-    o << cTypeDecl(type_, es) << " ";
+    o << cType() << " ";
     o << name_;
     
     // dimensions in reverse order for C
@@ -288,8 +288,6 @@ std::string Variable::cDeclaration() const
     if (es != 1 && (type_ == dwarf::DW_ATE_signed_char || type_ == dwarf::DW_ATE_unsigned_char)) {
         o << "[" << elementSize() << "]";
     }
-    
-    o << ";\n";
     
     return o.str();
 }

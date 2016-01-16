@@ -12,7 +12,7 @@
 
 using namespace llvm;
 
-Subprogram::Subprogram()
+Subprogram::Subprogram() : unsupported_(true)
 {
     
 }
@@ -31,7 +31,7 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
 
     // ignore main
     if (!r->name_.compare("main")) {
-        r.reset();
+        r->unsupported_ = true;
         return r;
     }
     
@@ -47,11 +47,12 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
 
             // if there is a parameter named __result, then it is an out parameter for
             // the return value of a function.  I still haven't figured out how this works
-            // so best to error here
+            // so best to skip this function
             if (!h->name_.compare("__result")) {
-                throw std::runtime_error("functions returning a non-scalar are not supported yet");
+                errs() << "function " << r->name_ << " appears to return an array or string which is not supported yet, skipping...";
+                break;
             }
-            outs() << "    " << *h;
+            r->args_.push_back(std::move(h));
         }
         
         // need to check the local variables because that is the only way to identify
@@ -62,7 +63,8 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         
         child = child->getSibling();
     }
-
+    
+    r->unsupported_ = false;
     return r;
 }
 
@@ -70,6 +72,32 @@ std::string Subprogram::cDeclaration() const
 {
     std::stringstream ss;
 
+    if (unsupported_) {
+        ss << "// function " << name_ << "is not supported yet\n";
+    } else {
+        
+        // return type
+        if (returnVal_) {
+            ss << returnVal_->cType() << " ";
+        } else {
+            ss << "void ";
+        }
+        
+        // name
+        ss << linkageName_ << "( ";
+        
+        // arguments
+        size_t narg = args_.size();
+        for (size_t i=0; i<narg; ++i) {
+            auto &arg = args_[i];
+            if (i>0) {
+                ss << ", ";
+            }
+            ss << arg->cDeclaration();
+        }
+        
+        ss << " );";
+    }
 
     return ss.str();
 }
@@ -78,10 +106,7 @@ void Subprogram::extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm
 {
     std::string resultName = "__result_" + name_;
     const char *varName = die->getName(cu, DINameKind::ShortName);
-    if (!resultName.compare(varName)) {
-        Variable::Handle ret = Variable::extract(die, cu);
-        outs() << name_ << " return is: " << ret->cDeclaration();
-    } else {
-        outs() << " no return for " << name_;
+    if (varName && !resultName.compare(varName)) {
+        returnVal_ = Variable::extract(die, cu);
     }
 }

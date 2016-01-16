@@ -31,7 +31,9 @@ public:
     
     std::string name_;
     std::string linkageName_;
-    std::vector<Variable::Handle> params_;
+    std::vector<Variable::Handle> args_;
+    Variable::Handle returnVal_;
+    bool unsupported_;
     
     void extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
 };
