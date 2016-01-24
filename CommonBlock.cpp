@@ -59,7 +59,7 @@ CommonBlock::Handle CommonBlock::extract(const DWARFDebugInfoEntryMinimal *die, 
     // children of common are the variables it contains
     auto child = die->getFirstChild();
     while (child && !child->isNULL()) {
-        auto var = Variable::extract(child, cu);
+        auto var = Variable::extract(Variable::COMMON_BLOCK_MEMBER, child, cu);
         r->vars_.push_back(std::move(var));
         child = child->getSibling();
     }
@@ -73,7 +73,7 @@ void CommonBlock::insertPadding()
     assert(vars_[0]->location_ == 0);
     size_t loc = 0, padCount=1;
     auto it = vars_.begin();
-    loc += (*it)->size_;
+    loc += (*it)->elementSize() * (*it)->elementCount();
     ++it;
     while (it != vars_.end()) {
         ptrdiff_t pad = (*it)->location_ - loc;
@@ -83,7 +83,8 @@ void CommonBlock::insertPadding()
             ss << "pad" << padCount++;
             Variable::Handle padVar(new Variable());
             padVar->location_ = loc;
-            padVar->size_ = pad;
+            padVar->elementSize_ = 1;
+            padVar->elementCount_ = pad;
             padVar->type_ = dwarf::DW_ATE_unsigned;
             padVar->name_ = ss.str();
             if (pad > 1) {

@@ -46,7 +46,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
     for (auto d : var.dims_) {
         o << "[" << d.first << ":" << d.second << "]";
     }
-    o << " @ " << var.location_ << ", size " << var.size_ << " bytes \n";
+    o << " @ " << var.location_ << ", size " << var.elementSize_ << " * " << var.elementCount_ << " bytes \n";
     return o;
 }
 
@@ -57,6 +57,10 @@ extractBaseType(const llvm::DWARFDebugInfoEntryMinimal *dieType,
     using namespace llvm;
     const uint64_t fail = static_cast<uint64_t>(-1);
     std::pair<llvm::dwarf::TypeKind, uint64_t> ret;
+    
+    // string type: then byte size has two possible meanings
+    // if it is the only attribute, then it is the length of the string
+    // if there is also a string length attribute, then it is the byte size of the string length
 
     auto typeTag = dieType->getTag();
     assert(typeTag == dwarf::DW_TAG_base_type || typeTag == dwarf::DW_TAG_string_type);
@@ -76,7 +80,7 @@ extractBaseType(const llvm::DWARFDebugInfoEntryMinimal *dieType,
     return ret;
 }
 
-Variable::Variable()
+Variable::Variable() : elementCount_(1), isConst_(false)
 {
     
 }
@@ -87,112 +91,22 @@ Variable::~Variable()
 }
 
 std::unique_ptr<Variable>
-Variable::extract(const llvm::DWARFDebugInfoEntryMinimal *die,
+Variable::extract(Context context, const llvm::DWARFDebugInfoEntryMinimal *die,
                   llvm::DWARFCompileUnit *cu)
 {
     using namespace llvm;
-    const uint64_t fail = static_cast<uint64_t>(-1);
 
     std::unique_ptr<Variable> r(new Variable());
+    r->context_ = context;
     r->name_ = die->getName(cu, DINameKind::ShortName);
     
-    DWARFFormValue locForm;
-    bool t = die->getAttributeValue(cu, dwarf::DW_AT_location, locForm);
-    if (t) {
-        // formal parameters use data4 instead of block (getAsSignedConstant?)
-        auto locBlock = locForm.getAsBlock();
-        if (!locBlock.hasValue()) {
-            auto locConstant = locForm.getAsSignedConstant();
-            assert(locConstant.hasValue());
-            r->location_ = locConstant.getValue();
-        } else {
-            auto val = locBlock.getValue();
-            if (val[0] == dwarf::DW_OP_addr) {
-                uint64_t addr;
-                unsigned char *paddr = reinterpret_cast<unsigned char *>(& addr);
-                std::copy(val.begin()+1, val.begin()+9, paddr);
-                r->location_ = addr;
-            } else {
-                // no address so this is a register or stack location which means the variable must
-                // be a subroutine parameter and we don't need the location
-                r->location_ = static_cast<uint64_t>(-1);
-            }
-        }
+    // location is only used for common block members to determine padding
+    if (context == COMMON_BLOCK_MEMBER) {
+        r->extractLocation(die, cu);
     }
-
-    // type
-    auto typeOffset = die->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-    auto dieType = cu->getDIEForOffset(typeOffset);
-    auto typeTag = dieType->getTag();
-
-    switch (typeTag) {
-        case dwarf::DW_TAG_base_type:
-        case dwarf::DW_TAG_string_type:
-        {
-            auto bt = extractBaseType(dieType, cu);
-            r->type_ = bt.first;
-            r->size_ = bt.second;
-        }
-        break;
-            
-        case dwarf::DW_TAG_array_type:
-        {
-            // find the base type for the array
-            auto arrayTypeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-            auto dieArrayType = cu->getDIEForOffset(arrayTypeOffset);
-            auto bt = extractBaseType(dieArrayType, cu);
-            r->type_ = bt.first;
-            
-            // dimensions
-            auto dim = dieType->getFirstChild();
-            size_t count = 1;
-            while (dim && !dim->isNULL()) {
-                Dimension d(0, -1);
-                assert(dim->getTag() == dwarf::DW_TAG_subrange_type);
-                DWARFFormValue form;
-                bool t = dim->getAttributeValue(cu, dwarf::DW_AT_upper_bound, form);
-                if (t) {
-                    auto ub = form.getAsSignedConstant();
-                    if (ub.hasValue()) d.second = ub.getValue();
-                }
-                
-                t = dim->getAttributeValue(cu, dwarf::DW_AT_lower_bound, form);
-                if (t) {
-                    auto lb = form.getAsSignedConstant();
-                    if (lb.hasValue()) d.first = lb.getValue();
-                }
-                r->dims_.push_back(d);
-                count *= (d.second-d.first);
-                dim = dim->getSibling();
-            }
-            r->size_ = bt.second * count;
-        }
-        break;
-
-        case dwarf::DW_TAG_const_type:
-        {
-            // find the base type for the constant
-            auto conTypeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-            auto dieConType = cu->getDIEForOffset(conTypeOffset);
-            auto bt = extractBaseType(dieConType, cu);
-            r->type_ = bt.first;
-            r->size_ = bt.second;
-        }
-        break;
-            
-        case dwarf::DW_TAG_structure_type:
-            throw std::invalid_argument("structures not supported yet");
-            break;
-            
-        case dwarf::DW_TAG_pointer_type:
-            // argv
-            throw std::invalid_argument("pointers not supported yet");
-            break;
-            
-        default:
-            throw std::invalid_argument("type tag not recognized");
-            break;
-    }
+    
+    // type information
+    r->extractType(die, cu);
 
     return r;
 }
@@ -290,4 +204,161 @@ std::string Variable::cDeclaration() const
     }
     
     return o.str();
+}
+
+void Variable::extractLocation(const llvm::DWARFDebugInfoEntryMinimal *die,
+                               llvm::DWARFCompileUnit *cu)
+{
+    using namespace llvm;
+    
+    DWARFFormValue locForm;
+    bool t = die->getAttributeValue(cu, dwarf::DW_AT_location, locForm);
+    if (!t) {
+        throw std::runtime_error("Variable::extractLocation--no location attribute");
+    }
+    
+    auto locBlock = locForm.getAsBlock();
+    if (!locBlock.hasValue()) {
+        throw std::runtime_error("Variable::extractLocation--not in block form");
+    }
+    
+    auto val = locBlock.getValue();
+    if (val[0] != dwarf::DW_OP_addr) {
+        throw std::runtime_error("Variable::extractLocation--not an absolute address");
+    }
+    uint64_t addr;
+    unsigned char *paddr = reinterpret_cast<unsigned char *>(& addr);
+    std::copy(val.begin()+1, val.begin()+9, paddr);
+    location_ = addr;
+}
+
+void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
+                           llvm::DWARFCompileUnit *cu)
+{
+    using namespace llvm;
+    
+    const uint64_t fail = static_cast<uint64_t>(-1);
+    auto typeOffset = die->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
+    auto dieType = cu->getDIEForOffset(typeOffset);
+    auto typeTag = dieType->getTag();
+    
+    
+    // arrays and const have the base type information nested one level lower in the tree
+    if (typeTag == dwarf::DW_TAG_array_type) {
+        extractArrayDims(dieType, cu);
+        
+        // use the type die from the array to get information about individual elements
+        typeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
+        dieType = cu->getDIEForOffset(typeOffset);
+        typeTag = dieType->getTag();
+    } else if (typeTag == dwarf::DW_TAG_const_type) {
+        isConst_ = true;
+        
+        // use the type die from the array to get information about individual elements
+        typeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
+        dieType = cu->getDIEForOffset(typeOffset);
+        typeTag = dieType->getTag();
+    }
+    
+    switch (typeTag) {
+        case dwarf::DW_TAG_base_type:
+        {
+            auto tmp = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_encoding, fail);
+            if(tmp == fail) {
+                throw std::runtime_error("Variable::extractType--no encoding");
+            }
+            type_ = static_cast<llvm::dwarf::TypeKind>(tmp);
+            
+            tmp = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, fail);
+            if(tmp == fail) {
+                throw std::runtime_error("Variable::extractType--no byte size");
+            }
+            elementSize_ = static_cast<llvm::dwarf::TypeKind>(tmp);
+        }
+            break;
+            
+        case dwarf::DW_TAG_string_type:
+        {
+            if (std::is_signed<char>::value) {
+                type_ = dwarf::DW_ATE_signed_char;
+            } else {
+                type_ = dwarf::DW_ATE_unsigned_char;
+            }
+            
+            // We only care about the string length if this is a common block member for padding determination.
+            // If this is a parameter, then the length is passed as a hidden argument.
+            if (context_ == COMMON_BLOCK_MEMBER) {
+                // string type: then byte size has two possible meanings
+                // if it is the only attribute, then it is the length of the string
+                // if there is also a string length attribute, then it is the byte size of the string length
+                ///\todo check to make sure there is no DW_AT_string_length attribute
+                elementSize_ = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, fail);
+                if (elementSize_ == fail) {
+                    throw std::runtime_error("Variable::extractType--no byte size for string");
+                }
+            } else {
+                elementSize_ = fail;
+            }
+        }
+            break;
+            
+        case dwarf::DW_TAG_array_type:
+        {
+            throw std::runtime_error("Variable::extractType--nested array types");
+        }
+            break;
+            
+        case dwarf::DW_TAG_const_type:
+        {
+            throw std::runtime_error("Variable::extractType--nested const types");
+        }
+            break;
+            
+        case dwarf::DW_TAG_structure_type:
+            throw std::runtime_error("Variable::extractType--structures not supported yet");
+            break;
+            
+        case dwarf::DW_TAG_pointer_type:
+            // argv
+            throw std::runtime_error("Variable::extractType--pointers not supported yet");
+            break;
+            
+        default:
+            throw std::runtime_error("Variable::extractType--type tag not recognized");
+            break;
+    }
+}
+
+void Variable::extractArrayDims(const llvm::DWARFDebugInfoEntryMinimal *die,
+                                llvm::DWARFCompileUnit *cu)
+{
+    using namespace llvm;
+    
+    // dimensions
+    auto dim = die->getFirstChild();
+    elementCount_ = 1;
+    while (dim && !dim->isNULL()) {
+        Dimension d(1, -1);
+        if (dim->getTag() != dwarf::DW_TAG_subrange_type) {
+            throw std::runtime_error("Variable::extractArrayDims--child is not a subrange");
+        }
+        DWARFFormValue form;
+        bool t = dim->getAttributeValue(cu, dwarf::DW_AT_upper_bound, form);
+        if (t) {
+            auto ub = form.getAsSignedConstant();
+            if (ub.hasValue()) d.second = ub.getValue();
+        } else {
+            throw std::runtime_error("Variable::extractArrayDims--no upper bound");
+        }
+        
+        // if no lower bound, use default of 1 for FORTRAN
+        t = dim->getAttributeValue(cu, dwarf::DW_AT_lower_bound, form);
+        if (t) {
+            auto lb = form.getAsSignedConstant();
+            if (lb.hasValue()) d.first = lb.getValue();
+        }
+        dims_.push_back(d);
+        elementCount_ *= (d.second-d.first);
+        dim = dim->getSibling();
+    }
 }

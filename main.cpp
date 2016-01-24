@@ -69,7 +69,7 @@ static void handleSubprogram(const DWARFDebugInfoEntryMinimal *die, DWARFCompile
                 CommonBlock::extractAndAdd(child, cu);
             }
             else if (tag == dwarf::DW_TAG_formal_parameter) {
-                Variable::Handle h = Variable::extract(child, cu);
+                Variable::Handle h = Variable::extract(Variable::PARAMETER, child, cu);
                 outs() << "    " << *h;
                 //handleParameter(child, cu);
             }
