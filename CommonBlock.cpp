@@ -84,11 +84,10 @@ void CommonBlock::insertPadding()
             Variable::Handle padVar(new Variable());
             padVar->location_ = loc;
             padVar->elementSize_ = 1;
-            padVar->elementCount_ = pad;
             padVar->type_ = dwarf::DW_ATE_unsigned;
             padVar->name_ = ss.str();
             if (pad > 1) {
-                padVar->dims_.push_back(Variable::Dimension(0, pad));
+                padVar->dims_.push_back(Variable::Dimension(std::make_pair(0, pad-1)));
             }
             it = vars_.insert(it, std::move(padVar));
             loc += pad;

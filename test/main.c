@@ -23,14 +23,7 @@ int main(int argc, char *argv[])
     printf("%c %d\n", c, l);
 
 
-    float ax[3][2];
-    array_test1_(ax);
-    for (int row=0; row<2; ++row) {
-        for (int col=0; col<3; ++col) {
-            printf("%g ", ax[col][row]);
-        }
-    }
-    printf("\n");
+    float v[3];
 
     int8_t ichar[3];
     string_array_test_(ichar, afoo, 2);

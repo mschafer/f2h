@@ -44,9 +44,9 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
     
     o << var.name_;
     for (auto d : var.dims_) {
-        o << "[" << d.first << ":" << d.second << "]";
+        o << "[" << d.getValue().first << ":" << d.getValue().second << "]";
     }
-    o << " @ " << var.location_ << ", size " << var.elementSize_ << " * " << var.elementCount_ << " bytes \n";
+    o << " @ " << var.location_ << ", element size " << var.elementSize_ << "\n";
     return o;
 }
 
@@ -80,7 +80,7 @@ extractBaseType(const llvm::DWARFDebugInfoEntryMinimal *dieType,
     return ret;
 }
 
-Variable::Variable() : elementCount_(1), isConst_(false)
+Variable::Variable() : isConst_(false)
 {
     
 }
@@ -185,24 +185,56 @@ std::string Variable::cDeclaration() const
     using namespace llvm;
     std::ostringstream o;
     
-    // element type declaration
-    auto es = elementSize();
-    o << cType() << " ";
-    o << name_;
+    // FORTRAN strings require special attention
+    if (isString()) {
+        switch (context_) {
+            case PARAMETER:
+            {
+                if (dims_.empty()) {
+                    o << "char *" << name_;
+                } else {
+                    
+                }
+            }
+                break;
+                
+            case COMMON_BLOCK_MEMBER:
+            {
+                if (dims_.empty()) {
+                    o << "char " << name_ << "[" << elementSize_ << "]";
+                }
+            }
+                break;
+        }
+        
+    } else {
     
-    // dimensions in reverse order for C
-    auto itdim = dims_.rbegin();
-    while (itdim != dims_.rend()) {
-        auto &d = *itdim;
-        o << "[" << d.second - d.first << "]";
-        ++itdim;
+        // element type declaration
+        o << cType() << " ";
+        
+        // parameters are always passed by reference which means
+        // scalars need a '*'
+        ///\todo hidden string length parameters don't, how to tell?
+        if (context_ == PARAMETER && dims_.empty()) {
+            o << '*';
+        }
+        o << name_;
+        
+        // dimensions in reverse order for C
+        auto itdim = dims_.rbegin();
+        while (itdim != dims_.rend()) {
+            if (!itdim->hasValue()) {
+                if (itdim != dims_.rbegin()) {
+                    throw std::runtime_error("Variable::cDeclaration--only the last dimension of an array should be unspecified");
+                }
+                o << "[]";
+            } else {
+                auto &d = itdim->getValue();
+                o << "[" << d.second - d.first + 1 << "]";
+            }
+            ++itdim;
+        }
     }
-    
-    // dimension of char arrays
-    if (es != 1 && (type_ == dwarf::DW_ATE_signed_char || type_ == dwarf::DW_ATE_unsigned_char)) {
-        o << "[" << elementSize() << "]";
-    }
-    
     return o.str();
 }
 
@@ -336,29 +368,44 @@ void Variable::extractArrayDims(const llvm::DWARFDebugInfoEntryMinimal *die,
     
     // dimensions
     auto dim = die->getFirstChild();
-    elementCount_ = 1;
     while (dim && !dim->isNULL()) {
-        Dimension d(1, -1);
+        Dimension d(std::make_pair(1, -1));
+        auto &dval = d.getValue();
         if (dim->getTag() != dwarf::DW_TAG_subrange_type) {
             throw std::runtime_error("Variable::extractArrayDims--child is not a subrange");
         }
         DWARFFormValue form;
         bool t = dim->getAttributeValue(cu, dwarf::DW_AT_upper_bound, form);
-        if (t) {
-            auto ub = form.getAsSignedConstant();
-            if (ub.hasValue()) d.second = ub.getValue();
+        auto ub = form.getAsSignedConstant();
+        if (t  && ub.hasValue()) {
+                dval.second = ub.getValue();
         } else {
-            throw std::runtime_error("Variable::extractArrayDims--no upper bound");
+            d.reset();
+            dims_.push_back(d);
+            dim = dim->getSibling();
+            continue;
         }
-        
+    
         // if no lower bound, use default of 1 for FORTRAN
         t = dim->getAttributeValue(cu, dwarf::DW_AT_lower_bound, form);
         if (t) {
             auto lb = form.getAsSignedConstant();
-            if (lb.hasValue()) d.first = lb.getValue();
+            if (lb.hasValue()) dval.first = lb.getValue();
         }
         dims_.push_back(d);
-        elementCount_ *= (d.second-d.first);
         dim = dim->getSibling();
     }
+}
+
+size_t Variable::elementCount() const
+{
+    size_t r = 1;
+    for (auto &d : dims_) {
+        if (!d.hasValue()) {
+            throw std::runtime_error("Variable::elementCount--undefined dimension");
+        }
+        auto &dval = d.getValue();
+        r *= dval.second - dval.first + 1;
+    }
+    return r;
 }

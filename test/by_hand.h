@@ -7,6 +7,7 @@ extern double complex z_times2_(double complex *arg);
 extern void string1_(char *s, int32_t len);
 extern void string_test_(char *c, int32_t *l, char *s, int32_t c_, int32_t s_);
 extern void string_array_test_(int8_t[3], char sa[3][2], int32_t _sa);
-extern void array_test1_(float x[3][2]);
-
+extern void vector_test_(float *s, float v[3]);
+extern void vector_test2_(float *s, float v[], int32_t *n);
+extern void matrix_test_(float *s, float m[][4], int32_t *n);
 #endif

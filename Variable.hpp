@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 #include <llvm/Support/Dwarf.h>
+#include <llvm/ADT/Optional.h>
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -17,7 +18,7 @@ class Variable
 public:
 
     /// lower bound, upper bound
-    using Dimension = std::pair<ptrdiff_t, ptrdiff_t>;
+    using Dimension = llvm::Optional<std::pair<ptrdiff_t, ptrdiff_t> >;
     using Handle = std::unique_ptr<Variable>;
     
     enum Context {
@@ -33,7 +34,7 @@ public:
         return dwarfToCType(type_, elementSize());
     }
     
-    size_t elementCount() const { return elementCount_; }
+    size_t elementCount() const;
     
     size_t elementSize() const { return elementSize_; }
     
@@ -59,11 +60,13 @@ public:
     
     void extractArrayDims(const llvm::DWARFDebugInfoEntryMinimal *die,
                           llvm::DWARFCompileUnit *cu);
+    
+    bool isString() const { return (type_ == llvm::dwarf::DW_ATE_signed_char ||
+        type_ == llvm::dwarf::DW_ATE_unsigned_char); }
 
     Context context_;
     llvm::dwarf::TypeKind type_;
     uint64_t elementSize_;
-    uint64_t elementCount_;
     uint64_t location_;
     std::string name_;
     std::vector<Dimension> dims_;

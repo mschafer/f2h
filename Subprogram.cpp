@@ -39,20 +39,30 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
     while (child && !child->isNULL()) {
         auto tag = child->getTag();
         if (tag == dwarf::DW_TAG_common_block) {
-            CommonBlock::extractAndAdd(child, cu);
+            try {
+                CommonBlock::extractAndAdd(child, cu);
+            } catch (std::runtime_error &ex) {
+                errs() << "skipping common block in " << r->name_  << " because " << ex.what();
+            }
         }
         
         else if (tag == dwarf::DW_TAG_formal_parameter) {
-            Variable::Handle h = Variable::extract(Variable::PARAMETER, child, cu);
+            try {
+                Variable::Handle h = Variable::extract(Variable::PARAMETER, child, cu);
+                
+                // if there is a parameter named __result, then it is an out parameter for
+                // the return value of a function.  I still haven't figured out how this works
+                // so best to skip this function
+                if (!h->name_.compare("__result")) {
+                    errs() << "function " << r->name_ << " appears to return an array or string which is not supported yet, skipping...";
+                    break;
+                }
+                r->args_.push_back(std::move(h));
 
-            // if there is a parameter named __result, then it is an out parameter for
-            // the return value of a function.  I still haven't figured out how this works
-            // so best to skip this function
-            if (!h->name_.compare("__result")) {
-                errs() << "function " << r->name_ << " appears to return an array or string which is not supported yet, skipping...";
-                break;
+            } catch (std::runtime_error &ex) {
+                errs() << "extract subrountine " << r->name_ << " failed on parameter: " <<  ex.what();
+                throw ex;
             }
-            r->args_.push_back(std::move(h));
         }
         
         // need to check the local variables because that is the only way to identify
