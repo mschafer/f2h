@@ -1,6 +1,13 @@
       SUBROUTINE VECTOR_TEST(S, V)
 
       implicit none
+      COMMON /ARRAYS_COMMON1/ IC, VC, MC, ZC
+
+      INTEGER*1 IC
+      REAL*4 VC(4)
+      REAL*8 MC(3,3)
+      COMPLEX*16 ZC(4)
+      
       REAL*4 S, V
       INTEGER I
       DIMENSION V(3)

@@ -61,7 +61,10 @@ static bool error(StringRef Filename, std::error_code EC) {
 static void extractObject(ObjectFile &obj)
 {
     std::unique_ptr<DWARFContextInMemory> DICtx(new DWARFContextInMemory(obj));
-    
+
+    *outputStream << "#ifdef __cplusplus" << std::endl << "extern \"C\" {" << std::endl << "#endif"
+    << std::endl << std::endl;
+
     auto cuit = DICtx->compile_units();
     for (auto &cu : cuit) {
         
@@ -79,7 +82,7 @@ static void extractObject(ObjectFile &obj)
             continue;
         }
         
-        *outputStream << "// " << cudie->getName(cu.get(), DINameKind::ShortName) << std::endl;
+        *outputStream << "// compilation unit: " << cudie->getName(cu.get(), DINameKind::ShortName) << std::endl;
         
         // look for children of the compile unit that are subprograms
         // immediate children of the subprogram include parameters, common blocks, and local variables
@@ -96,7 +99,15 @@ static void extractObject(ObjectFile &obj)
             }
             die = die->getSibling();
         }
+        
+        // output common blocks
+        *outputStream << std::endl << std::endl << "// common blocks" << std::endl;
+        for (auto &cbit : CommonBlock::map_) {
+            *outputStream << cbit.second->cDeclaration() << std::endl;
+        }
     }
+    *outputStream << "#ifdef __cplusplus" << std::endl << "}" << std::endl << "#endif" << std::endl;
+
 }
 
 int main(int argc, char **argv) {

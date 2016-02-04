@@ -90,8 +90,10 @@ void CommonBlock::insertPadding()
                 padVar->dims_.push_back(Variable::Dimension(std::make_pair(0, pad-1)));
             }
             it = vars_.insert(it, std::move(padVar));
+            ++it;
             loc += pad;
         }
+        loc += (*it)->elementSize() * (*it)->elementCount();
         ++it;
     }
 }
@@ -99,16 +101,14 @@ void CommonBlock::insertPadding()
 std::string CommonBlock::cDeclaration() const
 {
     std::stringstream ss;
-    ss << "#ifdef __cplusplus\nextern \"C\" {\n#endif\n";
     ss << "extern struct { \n";
     
     for (auto &v : vars_)
     {
-        ss << "    " << v->cDeclaration();
+        ss << "    " << v->cDeclaration() << ";" << std::endl;
     }
     
-    ss << "} " << linkageName_ << ";\n";
-    ss << "#ifdef __cplusplus\n}\n#endif\n";
+    ss << "} " << linkageName_ << ";" << std::endl;
     
     return ss.str();
 }

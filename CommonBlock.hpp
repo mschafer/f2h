@@ -33,7 +33,8 @@ public:
     /// \return C declaration for this common block.
     std::string cDeclaration() const;
 
-//private:
+private:
+    friend llvm::raw_ostream &operator<<(llvm::raw_ostream &, const CommonBlock &);
     static Handle extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
 
     void insertPadding();
