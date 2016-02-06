@@ -35,6 +35,7 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         return r;
     }
     
+    int stringParamCount = 0;
     auto child = die->getFirstChild();
     while (child && !child->isNULL()) {
         auto tag = child->getTag();
@@ -42,7 +43,7 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
             try {
                 CommonBlock::extractAndAdd(child, cu);
             } catch (std::runtime_error &ex) {
-                errs() << "skipping common block in " << r->name_  << " because " << ex.what();
+                errs() << "skipping common block in " << r->name_  << " because " << ex.what() << "\n";
             }
         }
         
@@ -54,13 +55,20 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
                 // the return value of a function.  I still haven't figured out how this works
                 // so best to skip this function
                 if (!h->name_.compare("__result")) {
-                    errs() << "function " << r->name_ << " appears to return an array or string which is not supported yet, skipping...";
+                    errs() << "function " << r->name_ << " appears to return an array or string which is not supported yet, skipping...\n";
                     break;
                 }
+                
+                // if this argument is a string, then there will be a hidden argument at the end for its length
+                if (h->isString()) {
+                    ++stringParamCount;
+                }
+                
                 r->args_.push_back(std::move(h));
+                
 
             } catch (std::runtime_error &ex) {
-                errs() << "extract subrountine " << r->name_ << " failed on parameter: " <<  ex.what();
+                errs() << "extract subrountine " << r->name_ << " failed on parameter: " <<  ex.what() << "\n";
                 throw ex;
             }
         }
@@ -72,6 +80,14 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         }
         
         child = child->getSibling();
+    }
+    
+    // mark parameters at the end of the argument list as string lengths
+    auto rit = r->args_.rbegin();
+    while (stringParamCount > 0) {
+        rit->get()->context_ = Variable::STRING_LEN_PARAMETER;
+        --stringParamCount;
+        ++rit;
     }
     
     r->unsupported_ = false;
@@ -103,7 +119,13 @@ std::string Subprogram::cDeclaration() const
             if (i>0) {
                 ss << ", ";
             }
-            ss << arg->cDeclaration();
+            try {
+                ss << arg->cDeclaration();
+            } catch (std::runtime_error &ex) {
+                errs() << "Subprogram::cDeclaration--argument cDecl failed: " << ex.what() << "\n";
+                errs() << "Skipping " << name_ << "\n";
+                throw ex;
+            }
         }
         
         ss << " );";

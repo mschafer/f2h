@@ -86,6 +86,7 @@ void CommonBlock::insertPadding()
             padVar->elementSize_ = 1;
             padVar->type_ = dwarf::DW_ATE_unsigned;
             padVar->name_ = ss.str();
+            padVar->context_ = Variable::COMMON_BLOCK_MEMBER;
             if (pad > 1) {
                 padVar->dims_.push_back(Variable::Dimension(std::make_pair(0, pad-1)));
             }

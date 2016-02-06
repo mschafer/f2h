@@ -45,6 +45,21 @@
       
       END
 
+      SUBROUTINE MATRIX_TEST2(S, M, NROWS, NCOLS)
+
+      implicit none
+      REAL*4 S, M
+      INTEGER I, J, NROWS, NCOLS
+      DIMENSION M(NROWS, NCOLS)
+
+      DO 10 J = 1,NCOLS
+         DO 20 I = 1,NROWS
+            M(I,J) = M(I,J) + S
+ 20      CONTINUE
+ 10   CONTINUE
+      
+      END
+
       SUBROUTINE ARRAY_TEST1(S, V, M, X)
 
       implicit none

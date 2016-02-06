@@ -19,6 +19,7 @@
 
       END
 
+
 !     Takes an array of 3 strings of unknown length
 !     IC gets the first character of each string as a 1 byte integer
       SUBROUTINE STRING_ARRAY_TEST(IC, SA)

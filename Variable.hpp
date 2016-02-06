@@ -23,6 +23,7 @@ public:
     
     enum Context {
         PARAMETER,
+        STRING_LEN_PARAMETER,
         COMMON_BLOCK_MEMBER
     };
     
@@ -63,7 +64,7 @@ public:
     
     bool isString() const { return (type_ == llvm::dwarf::DW_ATE_signed_char ||
         type_ == llvm::dwarf::DW_ATE_unsigned_char); }
-
+    
     Context context_;
     llvm::dwarf::TypeKind type_;
     uint64_t elementSize_;

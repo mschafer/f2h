@@ -185,55 +185,42 @@ std::string Variable::cDeclaration() const
     using namespace llvm;
     std::ostringstream o;
     
-    // FORTRAN strings require special attention
-    if (isString()) {
-        switch (context_) {
-            case PARAMETER:
-            {
-                if (dims_.empty()) {
-                    o << "char *" << name_;
-                } else {
-                    
-                }
-            }
-                break;
-                
-            case COMMON_BLOCK_MEMBER:
-            {
-                if (dims_.empty()) {
-                    o << "char " << name_ << "[" << elementSize_ << "]";
-                }
-            }
-                break;
-        }
-        
-    } else {
+    switch (context_) {
     
-        // element type declaration
-        o << cType() << " ";
-        
-        // parameters are always passed by reference which means
-        // scalars need a '*'
-        ///\todo hidden string length parameters don't, how to tell?
-        if (context_ == PARAMETER && dims_.empty()) {
-            o << '*';
-        }
-        o << name_;
-        
-        // dimensions in reverse order for C
-        auto itdim = dims_.rbegin();
-        while (itdim != dims_.rend()) {
-            if (!itdim->hasValue()) {
-                if (itdim != dims_.rbegin()) {
-                    throw std::runtime_error("Variable::cDeclaration--only the last dimension of an array should be unspecified");
+        case STRING_LEN_PARAMETER:
+            o << cType() << " " << name_;
+            break;
+    
+    /**
+     * \todo we usually can't find values for dimensions of an array parameter because they
+     * are passed in as other arguements or in a common block.  However, we do know how many
+     * dimensions there are.  Maybe generate a comment?
+     */
+        case PARAMETER:
+            o << cType() << " *" << name_;
+            break;
+    
+        case COMMON_BLOCK_MEMBER:
+            o << cType() << " " << name_;
+            
+            // dimensions
+            // array dimensions
+            auto itdim = dims_.rbegin();
+            while (itdim != dims_.rend()) {
+                if (!itdim->hasValue()) {
+                    throw std::runtime_error("Variable::cDeclaration--array in common block with unspecified dimensions");
+                } else {
+                    auto &d = itdim->getValue();
+                    o << "[" << d.second - d.first + 1 << "]";
                 }
-                o << "[]";
-            } else {
-                auto &d = itdim->getValue();
-                o << "[" << d.second - d.first + 1 << "]";
+                ++itdim;
             }
-            ++itdim;
-        }
+
+            if (isString()) {
+                o << "[" << elementSize_ << "]";
+            }
+            
+            break;
     }
     return o.str();
 }
