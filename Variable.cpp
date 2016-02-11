@@ -152,15 +152,15 @@ std::string Variable::dwarfToCType(llvm::dwarf::TypeKind type, size_t elementSiz
         {
             switch (elementSize) {
                 case 8:
-                    o << "float complex";
+                    o << "float_complex";
                     break;
                     
                 case 16:
-                    o << "double complex";
+                    o << "double_complex";
                     break;
                     
                 case 32:
-                    o << "long double complex";
+                    o << "long_double_complex";
                     break;
                     
                 default:
