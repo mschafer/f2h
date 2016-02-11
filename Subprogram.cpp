@@ -97,9 +97,10 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
 std::string Subprogram::cDeclaration() const
 {
     std::stringstream ss;
+    int line = 1;
 
     if (unsupported_) {
-        ss << "// function " << name_ << "is not supported yet\n";
+        ss << "// function " << name_ << " is not supported yet\n";
     } else {
         
         // return type
@@ -118,6 +119,11 @@ std::string Subprogram::cDeclaration() const
             auto &arg = args_[i];
             if (i>0) {
                 ss << ", ";
+                
+                if (ss.tellp() > line * 100) {
+                    ss << std::endl << "    ";
+                    ++line;
+                }
             }
             try {
                 ss << arg->cDeclaration();
