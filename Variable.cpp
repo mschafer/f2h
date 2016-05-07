@@ -292,7 +292,7 @@ void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
             if(tmp == fail) {
                 throw std::runtime_error("Variable::extractType--no byte size");
             }
-            elementSize_ = static_cast<llvm::dwarf::TypeKind>(tmp);
+            elementSize_ = tmp;
         }
             break;
             
