@@ -89,7 +89,10 @@ static void extractObject(ObjectFile &obj)
             if (die->isSubprogramDIE()) {
                 try {
                     Subprogram::Handle sub = Subprogram::extract(die, cu.get());
-                    *outputStream << sub->cDeclaration() << std::endl;
+                    // empty return w/o error means not a callable subprogram so just ignore
+                    if (sub) {
+                        *outputStream << sub->cDeclaration() << std::endl;
+                    }
                 } catch (std::runtime_error &ex) {
                     // skip the subroutine if something goes wrong with the extraction
                     // err message printed at site of throw

@@ -35,6 +35,16 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         return r;
     }
     
+    // ignore subprograms with an abstract origin as they just refer to a concrete instance
+    // which will be picked up later
+    const uint64_t fail = static_cast<uint64_t>(-1);
+    auto abstractOrigin = die->getAttributeValueAsReference(cu, dwarf::DW_AT_abstract_origin, fail);
+    if (abstractOrigin != fail) {
+        r.reset();
+        return r;
+    }
+    
+    
     int stringParamCount = 0;
     auto child = die->getFirstChild();
     while (child && !child->isNULL()) {

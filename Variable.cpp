@@ -258,6 +258,9 @@ void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
     
     const uint64_t fail = static_cast<uint64_t>(-1);
     auto typeOffset = die->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
+    if (typeOffset == fail) {
+        throw std::runtime_error("Variable::extractType--no type attribute");
+    }
     auto dieType = cu->getDIEForOffset(typeOffset);
     auto typeTag = dieType->getTag();
     
