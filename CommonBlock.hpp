@@ -25,7 +25,7 @@ public:
      * block with the same name, then this method assumes they are
      * identical and does nothing.
      */
-    static Handle extractAndAdd(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
+    static Handle extractAndAdd(llvm::DWARFDie die);
 
     /// Contains all common blocks added so far and indexed by name.
     static CommonMap map_;
@@ -35,7 +35,7 @@ public:
 
 private:
     friend llvm::raw_ostream &operator<<(llvm::raw_ostream &, const CommonBlock &);
-    static Handle extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
+    static Handle extract(llvm::DWARFDie die);
 
     void insertPadding();
 

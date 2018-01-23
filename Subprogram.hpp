@@ -16,7 +16,7 @@ class DWARFCompileUnit;
 class Subprogram
 {
 public:
-    using Handle = std::shared_ptr<Subprogram>;
+    using Handle = std::unique_ptr<Subprogram>;
     
     Subprogram();
     ~Subprogram();
@@ -25,7 +25,7 @@ public:
      * Extract information about the subprogram from dwarf data.
      * Any referenced common blocks are added to the static map.
      */
-    static Handle extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
+    static Handle extract(llvm::DWARFDie die);
 
     std::string cDeclaration() const;
     
@@ -35,7 +35,7 @@ public:
     Variable::Handle returnVal_;
     bool unsupported_;
     
-    void extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu);
+    void extractReturn(llvm::DWARFDie die);
 };
 
 #endif

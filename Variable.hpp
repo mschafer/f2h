@@ -4,7 +4,8 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <llvm/Support/Dwarf.h>
+#include <llvm/BinaryFormat/Dwarf.h>
+#include <llvm/DebugInfo/DWARF/DWARFDie.h>
 #include <llvm/ADT/Optional.h>
 #include "llvm/Support/raw_ostream.h"
 
@@ -41,9 +42,7 @@ public:
     
     static std::string dwarfToCType(llvm::dwarf::TypeKind, size_t elementSize);
     
-    static Handle extract(Context context,
-        const llvm::DWARFDebugInfoEntryMinimal *die,
-        llvm::DWARFCompileUnit *cu);
+    static Handle extract(Context context, llvm::DWARFDie die);
     
     /**
      * All common block members should have the location attribute stored as a
@@ -53,14 +52,11 @@ public:
      * form and cause this routine to throw an exception.  Location is only needed for
      * common block members to determine padding.
      */
-    void extractLocation(const llvm::DWARFDebugInfoEntryMinimal *die,
-                         llvm::DWARFCompileUnit *cu);
+    void extractLocation(llvm::DWARFDie die);
     
-    void extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
-                     llvm::DWARFCompileUnit *cu);
+    void extractType(llvm::DWARFDie die);
     
-    void extractArrayDims(const llvm::DWARFDebugInfoEntryMinimal *die,
-                          llvm::DWARFCompileUnit *cu);
+    void extractArrayDims(llvm::DWARFDie die);
     
     bool isString() const { return (type_ == llvm::dwarf::DW_ATE_signed_char ||
         type_ == llvm::dwarf::DW_ATE_unsigned_char); }

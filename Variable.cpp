@@ -1,5 +1,4 @@
 #include "Variable.hpp"
-#include <llvm/DebugInfo/DWARF/DWARFDebugInfoEntry.h>
 #include <llvm/DebugInfo/DWARF/DWARFContext.h>
 #include <llvm/DebugInfo/DWARF/DWARFFormValue.h>
 #include <type_traits>
@@ -51,7 +50,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Variable &var)
 }
 
 std::pair<llvm::dwarf::TypeKind, uint64_t>
-extractBaseType(const llvm::DWARFDebugInfoEntryMinimal *dieType,
+extractBaseType(llvm::DWARFDie dieType,
                      llvm::DWARFCompileUnit *cu)
 {
     using namespace llvm;
@@ -62,12 +61,19 @@ extractBaseType(const llvm::DWARFDebugInfoEntryMinimal *dieType,
     // if it is the only attribute, then it is the length of the string
     // if there is also a string length attribute, then it is the byte size of the string length
 
-    auto typeTag = dieType->getTag();
+    auto typeTag = dieType.getTag();
     assert(typeTag == dwarf::DW_TAG_base_type || typeTag == dwarf::DW_TAG_string_type);
-    ret.second = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, fail);
+    
+    auto size = dieType.find(dwarf::DW_AT_byte_size);
+    if (size.hasValue()) {
+        ret.second = size.getValue().getAsUnsignedConstant().getValueOr(fail);
+    }
+    else {
+        ret.second = fail;
+    }
+    
     if (typeTag == dwarf::DW_TAG_base_type) {
-        auto tmp = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_encoding, fail);
-        assert(tmp != fail);
+        auto tmp = dieType.find(dwarf::DW_AT_encoding).getValue().getAsUnsignedConstant().getValue();
         ret.first = static_cast<llvm::dwarf::TypeKind>(tmp);
     } else {
         // if string_type then no encoding so use char
@@ -91,22 +97,21 @@ Variable::~Variable()
 }
 
 std::unique_ptr<Variable>
-Variable::extract(Context context, const llvm::DWARFDebugInfoEntryMinimal *die,
-                  llvm::DWARFCompileUnit *cu)
+Variable::extract(Context context, llvm::DWARFDie die)
 {
     using namespace llvm;
 
     std::unique_ptr<Variable> r(new Variable());
     r->context_ = context;
-    r->name_ = die->getName(cu, DINameKind::ShortName);
+    r->name_ = die.getName(DINameKind::ShortName);
     
     // location is only used for common block members to determine padding
     if (context == COMMON_BLOCK_MEMBER) {
-        r->extractLocation(die, cu);
+        r->extractLocation(die);
     }
     
     // type information
-    r->extractType(die, cu);
+    r->extractType(die);
 
     return r;
 }
@@ -225,18 +230,16 @@ std::string Variable::cDeclaration() const
     return o.str();
 }
 
-void Variable::extractLocation(const llvm::DWARFDebugInfoEntryMinimal *die,
-                               llvm::DWARFCompileUnit *cu)
+void Variable::extractLocation(llvm::DWARFDie die)
 {
     using namespace llvm;
     
-    DWARFFormValue locForm;
-    bool t = die->getAttributeValue(cu, dwarf::DW_AT_location, locForm);
-    if (!t) {
+    auto locDie = die.find(dwarf::DW_AT_location);
+    if (!locDie.hasValue()) {
         throw std::runtime_error("Variable::extractLocation--no location attribute");
     }
-    
-    auto locBlock = locForm.getAsBlock();
+
+    auto locBlock = locDie.getValue().getAsBlock();
     if (!locBlock.hasValue()) {
         throw std::runtime_error("Variable::extractLocation--not in block form");
     }
@@ -251,51 +254,48 @@ void Variable::extractLocation(const llvm::DWARFDebugInfoEntryMinimal *die,
     location_ = addr;
 }
 
-void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
-                           llvm::DWARFCompileUnit *cu)
+void Variable::extractType(llvm::DWARFDie die)
 {
     using namespace llvm;
     
     const uint64_t fail = static_cast<uint64_t>(-1);
-    auto typeOffset = die->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-    if (typeOffset == fail) {
+    auto typeDie = die.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
+    if (!typeDie.isValid()) {
         throw std::runtime_error("Variable::extractType--no type attribute");
     }
-    auto dieType = cu->getDIEForOffset(typeOffset);
-    auto typeTag = dieType->getTag();
-    
+    auto typeTag = typeDie.getTag();
     
     // arrays and const have the base type information nested one level lower in the tree
     if (typeTag == dwarf::DW_TAG_array_type) {
-        extractArrayDims(dieType, cu);
+        extractArrayDims(typeDie);
         
         // use the type die from the array to get information about individual elements
-        typeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-        dieType = cu->getDIEForOffset(typeOffset);
-        typeTag = dieType->getTag();
-    } else if (typeTag == dwarf::DW_TAG_const_type) {
+        typeDie = die.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
+        typeTag = typeDie.getTag();
+    } 
+    
+    else if (typeTag == dwarf::DW_TAG_const_type) {
         isConst_ = true;
         
-        // use the type die from the array to get information about individual elements
-        typeOffset = dieType->getAttributeValueAsReference(cu, dwarf::DW_AT_type, fail);
-        dieType = cu->getDIEForOffset(typeOffset);
-        typeTag = dieType->getTag();
+        // use the type die from the array to get information about the type of the constant
+        typeDie = die.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
+        typeTag = typeDie.getTag();
     }
     
     switch (typeTag) {
         case dwarf::DW_TAG_base_type:
         {
-            auto tmp = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_encoding, fail);
-            if(tmp == fail) {
+            auto tmp = typeDie.find(dwarf::DW_AT_encoding);
+            if(!tmp.hasValue()) {
                 throw std::runtime_error("Variable::extractType--no encoding");
             }
-            type_ = static_cast<llvm::dwarf::TypeKind>(tmp);
+            type_ = static_cast<llvm::dwarf::TypeKind>(tmp.getValue().getAsUnsignedConstant().getValueOr(fail));
             
-            tmp = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, fail);
-            if(tmp == fail) {
+            tmp = typeDie.find(dwarf::DW_AT_byte_size);
+            if(!tmp.hasValue()) {
                 throw std::runtime_error("Variable::extractType--no byte size");
             }
-            elementSize_ = tmp;
+            elementSize_ = tmp.getValue().getAsUnsignedConstant().getValue();
         }
             break;
             
@@ -314,9 +314,12 @@ void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
                 // if it is the only attribute, then it is the length of the string
                 // if there is also a string length attribute, then it is the byte size of the string length
                 ///\todo check to make sure there is no DW_AT_string_length attribute
-                elementSize_ = dieType->getAttributeValueAsUnsignedConstant(cu, dwarf::DW_AT_byte_size, fail);
-                if (elementSize_ == fail) {
+                auto tmp = typeDie.find(dwarf::DW_AT_byte_size);
+                if (!tmp.hasValue()) {
                     throw std::runtime_error("Variable::extractType--no byte size for string");
+                }
+                else {
+                    elementSize_ = tmp.getValue().getAsUnsignedConstant().getValue();
                 }
             } else {
                 elementSize_ = fail;
@@ -351,39 +354,37 @@ void Variable::extractType(const llvm::DWARFDebugInfoEntryMinimal *die,
     }
 }
 
-void Variable::extractArrayDims(const llvm::DWARFDebugInfoEntryMinimal *die,
-                                llvm::DWARFCompileUnit *cu)
+void Variable::extractArrayDims(llvm::DWARFDie die)
 {
     using namespace llvm;
     
     // dimensions
-    auto dim = die->getFirstChild();
-    while (dim && !dim->isNULL()) {
+    auto dim = die.getFirstChild();
+    while (dim.isValid() && !dim.isNULL()) {
         Dimension d(std::make_pair(1, -1));
         auto &dval = d.getValue();
-        if (dim->getTag() != dwarf::DW_TAG_subrange_type) {
+        if (dim.getTag() != dwarf::DW_TAG_subrange_type) {
             throw std::runtime_error("Variable::extractArrayDims--child is not a subrange");
         }
-        DWARFFormValue form;
-        bool t = dim->getAttributeValue(cu, dwarf::DW_AT_upper_bound, form);
-        auto ub = form.getAsSignedConstant();
-        if (t  && ub.hasValue()) {
-                dval.second = ub.getValue();
-        } else {
+        auto dimAttr = dim.find(dwarf::DW_AT_upper_bound);
+        if (dimAttr.hasValue() && dimAttr.getValue().getAsSignedConstant().hasValue()) {
+            dval.second = dimAttr.getValue().getAsSignedConstant().getValue();
+        }
+        else {
             d.reset();
             dims_.push_back(d);
-            dim = dim->getSibling();
+            dim = dim.getSibling();
             continue;
         }
     
         // if no lower bound, use default of 1 for FORTRAN
-        t = dim->getAttributeValue(cu, dwarf::DW_AT_lower_bound, form);
-        if (t) {
-            auto lb = form.getAsSignedConstant();
+        dimAttr = dim.find(dwarf::DW_AT_lower_bound);
+        if (dimAttr.hasValue()) {
+            auto lb = dimAttr.getValue().getAsSignedConstant();
             if (lb.hasValue()) dval.first = lb.getValue();
         }
         dims_.push_back(d);
-        dim = dim->getSibling();
+        dim = dim.getSibling();
     }
 }
 

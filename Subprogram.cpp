@@ -7,7 +7,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Dwarf.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include <sstream>
 
 using namespace llvm;
@@ -22,12 +22,12 @@ Subprogram::~Subprogram()
     
 }
 
-Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu)
+Subprogram::Handle Subprogram::extract(llvm::DWARFDie die)
 {
     Handle r(new Subprogram());
 
-    r->name_ = die->getName(cu, DINameKind::ShortName);
-    r->linkageName_ = die->getName(cu, DINameKind::LinkageName);
+    r->name_ = die.getName(DINameKind::ShortName);
+    r->linkageName_ = die.getName(DINameKind::LinkageName);
 
     // ignore main
     if (!r->name_.compare("main")) {
@@ -38,20 +38,19 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
     // ignore subprograms with an abstract origin as they just refer to a concrete instance
     // which will be picked up later
     const uint64_t fail = static_cast<uint64_t>(-1);
-    auto abstractOrigin = die->getAttributeValueAsReference(cu, dwarf::DW_AT_abstract_origin, fail);
-    if (abstractOrigin != fail) {
+    auto abstractOrigin = die.find(dwarf::DW_AT_abstract_origin);
+    if (abstractOrigin.hasValue()) {
         r.reset();
         return r;
     }
-    
-    
+        
     int stringParamCount = 0;
-    auto child = die->getFirstChild();
-    while (child && !child->isNULL()) {
-        auto tag = child->getTag();
+    auto child = die.getFirstChild();
+    while (child.isValid() && !child.isNULL()) {
+        auto tag = child.getTag();
         if (tag == dwarf::DW_TAG_common_block) {
             try {
-                CommonBlock::extractAndAdd(child, cu);
+                CommonBlock::extractAndAdd(child);
             } catch (std::runtime_error &ex) {
                 errs() << "skipping common block in " << r->name_  << " because " << ex.what() << "\n";
             }
@@ -59,7 +58,7 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         
         else if (tag == dwarf::DW_TAG_formal_parameter) {
             try {
-                Variable::Handle h = Variable::extract(Variable::PARAMETER, child, cu);
+                Variable::Handle h = Variable::extract(Variable::PARAMETER, child);
                 
                 // if there is a parameter named __result, then it is an out parameter for
                 // the return value of a function.  I still haven't figured out how this works
@@ -86,10 +85,10 @@ Subprogram::Handle Subprogram::extract(const llvm::DWARFDebugInfoEntryMinimal *d
         // need to check the local variables because that is the only way to identify
         // a function that returns a value
         else if (tag == dwarf::DW_TAG_variable) {
-            r->extractReturn(child, cu);
+            r->extractReturn(child);
         }
         
-        child = child->getSibling();
+        child = child.getSibling();
     }
     
     // mark parameters at the end of the argument list as string lengths
@@ -150,11 +149,11 @@ std::string Subprogram::cDeclaration() const
     return ss.str();
 }
 
-void Subprogram::extractReturn(const llvm::DWARFDebugInfoEntryMinimal *die, llvm::DWARFCompileUnit *cu)
+void Subprogram::extractReturn(llvm::DWARFDie die)
 {
     std::string resultName = "__result_" + name_;
-    const char *varName = die->getName(cu, DINameKind::ShortName);
+    const char *varName = die.getName(DINameKind::ShortName);
     if (varName && !resultName.compare(varName)) {
-        returnVal_ = Variable::extract(Variable::PARAMETER, die, cu);
+        returnVal_ = Variable::extract(Variable::PARAMETER, die);
     }
 }

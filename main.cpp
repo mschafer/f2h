@@ -3,6 +3,7 @@
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
+#include "llvm/DebugInfo/DWARF/DWARFDebugInfoEntry.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/RelocVisitor.h"
 #include "llvm/Support/CommandLine.h"
@@ -13,7 +14,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Dwarf.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include <algorithm>
 #include <cstring>
 #include <list>
@@ -70,25 +71,24 @@ static void extractObject(ObjectFile &obj)
         auto cudie = cu->getUnitDIE(false);
         
         // ensure compilation unit is fortran
-        DWARFFormValue form;
-        cudie->getAttributeValue(cu.get(), dwarf::DW_AT_language, form);
-        auto lang = form.getAsUnsignedConstant().getValueOr(-1);
+        auto lang = cudie.find(dwarf::DW_AT_language).getValue().getAsUnsignedConstant().getValue();
+        //auto lang = form.getAsUnsignedConstant().getValueOr(-1);
         if (!(lang == dwarf::DW_LANG_Fortran77 ||
               lang == dwarf::DW_LANG_Fortran90 ||
               lang == dwarf::DW_LANG_Fortran95)) {
-            errs() << cudie->getName(cu.get(), DINameKind::ShortName) << " is not FORTRAN 77,90, or 95.  Skipping\n";
+            errs() << cudie.getName(DINameKind::ShortName) << " is not FORTRAN 77,90, or 95.  Skipping\n";
             continue;
         }
         
-        *outputStream << "// compilation unit: " << cudie->getName(cu.get(), DINameKind::ShortName) << std::endl;
+        *outputStream << "// compilation unit: " << cudie.getName(DINameKind::ShortName) << std::endl;
         
         // look for children of the compile unit that are subprograms
         // immediate children of the subprogram include parameters, common blocks, and local variables
-        auto die = cudie->getFirstChild();
-        while (die && !die->isNULL()) {
-            if (die->isSubprogramDIE()) {
+        auto die = cudie.getFirstChild();
+        while (die && !die.isNULL()) {
+            if (die.isSubprogramDIE()) {
                 try {
-                    Subprogram::Handle sub = Subprogram::extract(die, cu.get());
+                    Subprogram::Handle sub = Subprogram::extract(die);
                     // empty return w/o error means not a callable subprogram so just ignore
                     if (sub) {
                         *outputStream << sub->cDeclaration() << std::endl;
@@ -98,7 +98,7 @@ static void extractObject(ObjectFile &obj)
                     // err message printed at site of throw
                 }
             }
-            die = die->getSibling();
+            die = die.getSibling();
         }
         *outputStream << std::endl;
     }
@@ -107,7 +107,7 @@ static void extractObject(ObjectFile &obj)
 
 int main(int argc, char **argv) {
     // Print a stack trace if we signal out.
-    sys::PrintStackTraceOnErrorSignal();
+    sys::PrintStackTraceOnErrorSignal(argv[0]);
     PrettyStackTraceProgram X(argc, argv);
     llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
     
@@ -149,9 +149,8 @@ int main(int argc, char **argv) {
         }
         std::unique_ptr<MemoryBuffer> Buff = std::move(BuffOrErr.get());
         
-        ErrorOr<std::unique_ptr<ObjectFile>> ObjOrErr =
-        ObjectFile::createObjectFile(Buff->getMemBufferRef());
-        if (error(filename, ObjOrErr.getError())) {
+        auto ObjOrErr = ObjectFile::createObjectFile(Buff->getMemBufferRef());
+        if (error(filename, errorToErrorCode(ObjOrErr.takeError()))) {
             errs() << "failed to create object file " << filename << '\n';
             continue;
         }
