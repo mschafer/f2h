@@ -50,8 +50,6 @@ CommonBlock::Handle CommonBlock::extract(DWARFDie die)
     r->name_ = die.getName(DINameKind::ShortName);
     r->linkageName_ = die.getName(DINameKind::LinkageName);
     
-    auto offset = die.getOffset();
-
 #if 0 ///\todo did something in llvm 3.7
     auto debugInfoData = cu->getDebugInfoExtractor();
     assert(debugInfoData.isValidOffset(offset));
@@ -63,7 +61,12 @@ CommonBlock::Handle CommonBlock::extract(DWARFDie die)
     auto child = die.getFirstChild();
     while (child.isValid() && !child.isNULL()) {
         auto var = Variable::extract(Variable::COMMON_BLOCK_MEMBER, child);
-        r->vars_.push_back(std::move(var));
+        
+        // an equivalence statment will cause the same memory to appear twice in the common block
+        // under different names.  Throw away the second one for now.
+        if (r->vars_.empty() || (var->location_ != r->vars_.back()->location_)) {
+            r->vars_.push_back(std::move(var));
+        }        
         child = child.getSibling();
     }
     r->insertPadding();

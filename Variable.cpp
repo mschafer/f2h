@@ -270,7 +270,7 @@ void Variable::extractType(llvm::DWARFDie die)
         extractArrayDims(typeDie);
         
         // use the type die from the array to get information about individual elements
-        typeDie = die.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
+        typeDie = typeDie.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
         typeTag = typeDie.getTag();
     } 
     
@@ -278,7 +278,7 @@ void Variable::extractType(llvm::DWARFDie die)
         isConst_ = true;
         
         // use the type die from the array to get information about the type of the constant
-        typeDie = die.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
+        typeDie = typeDie.getAttributeValueAsReferencedDie(dwarf::DW_AT_type);
         typeTag = typeDie.getTag();
     }
     

@@ -37,7 +37,6 @@ Subprogram::Handle Subprogram::extract(llvm::DWARFDie die)
     
     // ignore subprograms with an abstract origin as they just refer to a concrete instance
     // which will be picked up later
-    const uint64_t fail = static_cast<uint64_t>(-1);
     auto abstractOrigin = die.find(dwarf::DW_AT_abstract_origin);
     if (abstractOrigin.hasValue()) {
         r.reset();
